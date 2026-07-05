@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>発注システム</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+    background: #1a2a3a;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: #0d1b2a;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 3px solid #e87c2a;
+  }
+  header h1 { font-size: 28px; font-weight: 900; }
+  header .date { font-size: 16px; color: #a0b4c8; }
+
+  .tab-bar {
+    display: flex;
+    background: #0d1b2a;
+    border-bottom: 2px solid #2a3f54;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tab-bar::-webkit-scrollbar { display: none; }
+
+  .tab {
+    flex-shrink: 0;
+    padding: 14px 20px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #a0b4c8;
+    background: none;
+    border: none;
+    border-bottom: 4px solid transparent;
+    cursor: pointer;
+  }
+  .tab.active { color: #e87c2a; border-bottom-color: #e87c2a; }
+
+  .item-grid {
+    flex: 1;
+    padding: 16px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    overflow-y: auto;
+  }
+
+  .item-card {
+    background: #243447;
+    border-radius: 14px;
+    padding: 18px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    border: 2px solid transparent;
+  }
+  .item-card.has-qty { border-color: #e87c2a; background: #2e3f52; }
+
+  .item-name { font-size: 19px; font-weight: 800; text-align: center; line-height: 1.3; color: #e8f0f8; }
+  .item-unit { font-size: 13px; color: #7a9ab4; margin-top: -8px; }
+
+  .qty-control { display: flex; align-items: center; gap: 10px; }
+
+  .qty-btn {
+    width: 52px; height: 52px;
+    border-radius: 50%; border: none;
+    font-size: 28px; font-weight: 900;
+    cursor: pointer; display: flex;
+    align-items: center; justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .qty-btn:active { transform: scale(0.9); }
+  .btn-minus { background: #3a5068; color: #a0b4c8; }
+  .btn-plus { background: #e87c2a; color: #fff; }
+  .qty-display { font-size: 30px; font-weight: 900; min-width: 44px; text-align: center; }
+
+  .order-bar {
+    background: #0d1b2a;
+    border-top: 3px solid #2a3f54;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .order-summary { flex: 1; font-size: 16px; color: #a0b4c8; }
+  .order-summary strong { color: #e87c2a; font-size: 22px; }
+
+  .order-btn {
+    background: #e87c2a; color: #fff;
+    border: none; border-radius: 16px;
+    padding: 18px 28px; font-size: 22px; font-weight: 900;
+    cursor: pointer; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .order-btn:active { transform: scale(0.96); }
+  .order-btn:disabled { background: #3a5068; color: #6a8aa4; cursor: not-allowed; }
+
+  /* モーダル */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.8); z-index: 100;
+    align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+
+  .modal {
+    background: #1a2a3a; border-radius: 20px;
+    padding: 28px 24px; width: 100%; max-width: 480px;
+    border: 2px solid #e87c2a;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 24px; font-weight: 900; margin-bottom: 16px; color: #e87c2a; }
+
+  .modal-list {
+    background: #0d1b2a; border-radius: 12px;
+    padding: 16px; margin-bottom: 20px;
+    max-height: 240px; overflow-y: auto;
+  }
+  .modal-item {
+    display: flex; justify-content: space-between;
+    padding: 10px 0; font-size: 18px;
+    border-bottom: 1px solid #2a3f54;
+  }
+  .modal-item:last-child { border-bottom: none; }
+  .modal-item-qty { color: #e87c2a; font-weight: 900; }
+
+  .modal-actions { display: flex; gap: 12px; margin-top: 16px; }
+  .btn-cancel {
+    flex: 1; padding: 16px; background: #2a3f54;
+    color: #a0b4c8; border: none; border-radius: 12px;
+    font-size: 18px; font-weight: 700; cursor: pointer;
+  }
+  .btn-send {
+    flex: 2; padding: 16px; background: #e87c2a;
+    color: #fff; border: none; border-radius: 12px;
+    font-size: 20px; font-weight: 900; cursor: pointer;
+  }
+  .btn-send:disabled { background: #3a5068; color: #6a8aa4; }
+
+  /* 完了画面 */
+  .done-screen {
+    display: none; position: fixed; inset: 0;
+    background: #0d1b2a; z-index: 200;
+    flex-direction: column; align-items: center;
+    justify-content: center; gap: 24px;
+  }
+  .done-screen.show { display: flex; }
+  .done-icon {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: #e87c2a; display: flex;
+    align-items: center; justify-content: center; font-size: 52px;
+  }
+  .done-text { font-size: 30px; font-weight: 900; }
+  .done-sub { font-size: 17px; color: #7a9ab4; text-align: center; padding: 0 20px; }
+  .btn-reset {
+    margin-top: 12px; padding: 18px 40px;
+    background: #e87c2a; color: #fff; border: none;
+    border-radius: 16px; font-size: 22px; font-weight: 900; cursor: pointer;
+  }
+
+  /* 設定画面（現場名のみ。GASのURLはコード側に埋め込み） */
+  .settings-area { padding: 20px; }
+  .settings-area h3 { font-size: 18px; color: #a0b4c8; margin-bottom: 16px; }
+
+  .setting-section {
+    background: #243447; border-radius: 14px;
+    padding: 20px; margin-bottom: 16px;
+  }
+  .setting-section h4 { font-size: 16px; color: #e87c2a; margin-bottom: 12px; }
+  .setting-row { margin-bottom: 14px; }
+  .setting-row label { font-size: 14px; color: #7a9ab4; display: block; margin-bottom: 6px; }
+  .setting-row input {
+    width: 100%; background: #1a2a3a;
+    border: 1px solid #3a5068; border-radius: 8px;
+    padding: 12px; font-size: 16px; color: #fff; outline: none;
+  }
+  .setting-row input:focus { border-color: #e87c2a; }
+
+  .save-btn {
+    width: 100%; padding: 16px; background: #e87c2a;
+    color: #fff; border: none; border-radius: 12px;
+    font-size: 20px; font-weight: 900; cursor: pointer; margin-top: 4px;
+  }
+
+  .status-badge {
+    display: inline-block; padding: 4px 12px;
+    border-radius: 20px; font-size: 13px; font-weight: 700;
+    margin-left: 8px;
+  }
+  .status-ok { background: #1a4a2a; color: #4caf50; }
+  .status-ng { background: #4a1a1a; color: #f44336; }
+
+  .hint { font-size: 13px; color: #7a9ab4; margin-top: 8px; line-height: 1.5; }
+
+  /* ローディング */
+  .spinner {
+    display: inline-block; width: 20px; height: 20px;
+    border: 3px solid rgba(255,255,255,0.3);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📦 発注システム</h1>
+  <div class="date" id="dateDisplay"></div>
+</header>
+
+<div class="tab-bar" id="tabBar"></div>
+<div class="item-grid" id="itemGrid"></div>
+
+<div class="order-bar">
+  <div class="order-summary">選択中：<strong id="totalCount">0</strong> 品目</div>
+  <button class="order-btn" id="orderBtn" disabled onclick="showConfirm()">発注する</button>
+</div>
+
+<!-- 確認モーダル -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal">
+    <h2>✅ 発注内容の確認</h2>
+    <div class="modal-list" id="confirmList"></div>
+    <p class="hint" id="sendToLabel">この内容でスプレッドシートに記録されます</p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeConfirm()">戻る</button>
+      <button class="btn-send" id="sendBtn" onclick="sendOrder()">発注する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 完了画面 -->
+<div class="done-screen" id="doneScreen">
+  <div class="done-icon">✓</div>
+  <div class="done-text">発注完了！</div>
+  <div class="done-sub" id="doneTime"></div>
+  <button class="btn-reset" onclick="resetAll()">次の発注へ</button>
+</div>
+
+<script>
+// =====================
+// GAS ウェブアプリURL（デプロイ後に発行されたURLをここに貼り付け）
+// =====================
+const GAS_URL = "ここにデプロイ後のウェブアプリURLを貼り付け";
+
+// =====================
+// 品目データ（ここを編集）
+// =====================
+const CATEGORIES = [
+  {
+    name: "洗剤・清掃剤",
+    items: [
+      { id: 1, name: "トイレ洗剤", unit: "本" },
+      { id: 2, name: "床洗剤", unit: "L" },
+      { id: 3, name: "ガラス洗剤", unit: "本" },
+      { id: 4, name: "除菌スプレー", unit: "本" },
+      { id: 5, name: "漂白剤", unit: "本" },
+    ]
+  },
+  {
+    name: "消耗品",
+    items: [
+      { id: 6, name: "トイレットペーパー", unit: "袋" },
+      { id: 7, name: "ゴミ袋（大）", unit: "箱" },
+      { id: 8, name: "ゴミ袋（小）", unit: "箱" },
+      { id: 9, name: "使い捨て手袋", unit: "箱" },
+      { id: 10, name: "マスク", unit: "箱" },
+    ]
+  },
+  {
+    name: "清掃用具",
+    items: [
+      { id: 11, name: "モップヘッド", unit: "個" },
+      { id: 12, name: "スポンジ", unit: "袋" },
+      { id: 13, name: "ブラシ", unit: "本" },
+      { id: 14, name: "雑巾", unit: "枚" },
+      { id: 15, name: "ペーパータオル", unit: "箱" },
+    ]
+  },
+  {
+    name: "芳香・衛生",
+    items: [
+      { id: 16, name: "芳香剤", unit: "個" },
+      { id: 17, name: "消臭剤", unit: "本" },
+      { id: 18, name: "害虫忌避剤", unit: "個" },
+    ]
+  },
+  { name: "⚙ 設定", items: [] }
+];
+
+// =====================
+// 状態
+// =====================
+let quantities = {};
+let currentCat = 0;
+
+// 設定（現場名のみ。ブラウザに保存される）
+let config = JSON.parse(localStorage.getItem('orderConfig') || '{}');
+
+// =====================
+// 初期化
+// =====================
+function init() {
+  const now = new Date();
+  document.getElementById('dateDisplay').textContent =
+    `${now.getMonth()+1}月${now.getDate()}日`;
+
+  const tabBar = document.getElementById('tabBar');
+  CATEGORIES.forEach((cat, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (i === 0 ? ' active' : '');
+    btn.textContent = cat.name;
+    btn.onclick = () => switchTab(i);
+    tabBar.appendChild(btn);
+  });
+
+  renderItems();
+}
+
+function switchTab(idx) {
+  currentCat = idx;
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  renderItems();
+}
+
+function renderItems() {
+  const grid = document.getElementById('itemGrid');
+
+  if (currentCat === CATEGORIES.length - 1) {
+    renderSettings(grid);
+    return;
+  }
+
+  grid.style.display = 'grid';
+  grid.innerHTML = '';
+  CATEGORIES[currentCat].items.forEach(item => {
+    const qty = quantities[item.id] || 0;
+    const card = document.createElement('div');
+    card.className = 'item-card' + (qty > 0 ? ' has-qty' : '');
+    card.id = `card-${item.id}`;
+    card.innerHTML = `
+      <div class="item-name">${item.name}</div>
+      <div class="item-unit">単位：${item.unit}</div>
+      <div class="qty-control">
+        <button class="qty-btn btn-minus" onclick="changeQty(${item.id}, -1)">－</button>
+        <div class="qty-display" id="qty-${item.id}">${qty}</div>
+        <button class="qty-btn btn-plus" onclick="changeQty(${item.id}, 1)">＋</button>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+function renderSettings(grid) {
+  grid.style.display = 'block';
+  const gasStatus = (GAS_URL && !GAS_URL.startsWith('ここに'))
+    ? '<span class="status-badge status-ok">✓ 接続設定済み</span>'
+    : '<span class="status-badge status-ng">未設定</span>';
+
+  grid.innerHTML = `
+    <div class="settings-area">
+      <h3>⚙ 設定</h3>
+
+      <div class="setting-section">
+        <h4>🏢 現場情報</h4>
+        <div class="setting-row">
+          <label>現場名（発注記録に表示されます）</label>
+          <input type="text" id="settingSiteName" value="${config.siteName||''}" placeholder="例：つかしん">
+        </div>
+        <button class="save-btn" onclick="saveSettings()">💾 保存する</button>
+      </div>
+
+      <div class="setting-section">
+        <h4>📊 記録先 ${gasStatus}</h4>
+        <p class="hint">発注内容は自動的にスプレッドシートへ記録されます。担当者へのメール通知も設定されている場合は自動で届きます。</p>
+        <p class="hint">接続先の変更が必要な場合は、システム管理者（GASスクリプトの設定）に連絡してください。</p>
+      </div>
+    </div>
+  `;
+}
+
+function changeQty(id, delta) {
+  quantities[id] = Math.max(0, (quantities[id] || 0) + delta);
+  const qtyEl = document.getElementById(`qty-${id}`);
+  const cardEl = document.getElementById(`card-${id}`);
+  if (qtyEl) qtyEl.textContent = quantities[id];
+  if (cardEl) cardEl.className = 'item-card' + (quantities[id] > 0 ? ' has-qty' : '');
+  updateSummary();
+}
+
+function updateSummary() {
+  const count = Object.values(quantities).filter(v => v > 0).length;
+  document.getElementById('totalCount').textContent = count;
+  document.getElementById('orderBtn').disabled = count === 0;
+}
+
+function showConfirm() {
+  const list = document.getElementById('confirmList');
+  list.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    cat.items.forEach(item => {
+      const qty = quantities[item.id] || 0;
+      if (qty > 0) {
+        const row = document.createElement('div');
+        row.className = 'modal-item';
+        row.innerHTML = `<span>${item.name}</span><span class="modal-item-qty">${qty} ${item.unit}</span>`;
+        list.appendChild(row);
+      }
+    });
+  });
+
+  document.getElementById('sendBtn').textContent = '発注する';
+  document.getElementById('sendBtn').disabled = false;
+
+  document.getElementById('confirmModal').classList.add('show');
+}
+
+function closeConfirm() {
+  document.getElementById('confirmModal').classList.remove('show');
+}
+
+// =====================
+// GASへ送信（スプレッドシート記録）
+// =====================
+async function sendOrder() {
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.innerHTML = '<span class="spinner"></span> 送信中...';
+  sendBtn.disabled = true;
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}時${now.getMinutes()}分`;
+
+  const items = [];
+  CATEGORIES.forEach(cat => {
+    cat.items.forEach(item => {
+      const qty = quantities[item.id] || 0;
+      if (qty > 0) items.push({ name: item.name, qty, unit: item.unit });
+    });
+  });
+
+  try {
+    if (GAS_URL && !GAS_URL.startsWith('ここに')) {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        mode: 'no-cors', // GASウェブアプリの制約により、レスポンス内容は読み取れない
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ items, siteName: config.siteName || '' })
+      });
+    }
+
+    quantities = {};
+    closeConfirm();
+    document.getElementById('doneTime').textContent = `${dateStr} に送信しました`;
+    document.getElementById('doneScreen').classList.add('show');
+    updateSummary();
+
+  } catch(e) {
+    alert('通信エラーが発生しました。WiFiを確認してください。');
+    sendBtn.innerHTML = '発注する';
+    sendBtn.disabled = false;
+  }
+}
+
+function saveSettings() {
+  config.siteName = document.getElementById('settingSiteName')?.value.trim();
+  localStorage.setItem('orderConfig', JSON.stringify(config));
+  alert('✅ 保存しました');
+}
+
+function resetAll() {
+  quantities = {};
+  document.getElementById('doneScreen').classList.remove('show');
+  switchTab(0);
+  updateSummary();
+}
+
+init();
+</script>
+</body>
+</html>
